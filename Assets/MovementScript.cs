@@ -37,8 +37,6 @@ public class MovementScript : NetworkBehaviour
 
     public static Vector3 charPos;
 
-    public Transform handPos;
-    public Transform beamTransform;
     public float beamLength;
     public float beamThickness;
     public Material beamMat;
@@ -60,16 +58,14 @@ public class MovementScript : NetworkBehaviour
     public AudioClip pickUp;
     public AudioClip putDown;
 
-    //tools
-    public bool hasGun;
-
-    public Color[] gunColor;
-    public int activeColor;
-    public MeshRenderer gunRend;
-    public MeshRenderer beamRend;
+    //slower;
+    public static float physicsSpeed = 1;
+    public  float physicsSpeedDelta = 1;
+    public float slowSpeed;
 
     void Start()
     {
+        physicsSpeed = 1;
         AS = GetComponent<AudioSource>();
         holdingItem = false;
         MANAGER = GameObject.Find("HUD").GetComponent<NetworkManager>();
@@ -97,23 +93,6 @@ public class MovementScript : NetworkBehaviour
     {
         RaycastHit hit;
         Physics.Raycast(HEAD.position, HEAD.forward, out hit);
-        if (hit.collider!=null)
-        {
-            beamLength = (hit.point - beamTransform.position).magnitude;
-            handPos.LookAt(hit.point);
-        }
-        else
-        {
-            beamLength = 999;
-            handPos.LookAt(HEAD.position + HEAD.forward * 9999);
-        }
-
-        beamThickness = Mathf.Lerp(beamThickness,.1f,Time.deltaTime * 10);
-        //beamMat.color = Color.Lerp(beamMat.color, new Color(1,1,1,0),Time.deltaTime * 5);
-
-        beamRend.material.SetColor("_Color", Color.Lerp(beamRend.material.color, new Color(beamRend.material.color.r, beamRend.material.color.g, beamRend.material.color.b,0),Time.deltaTime * 5));
-
-        beamTransform.localScale = new Vector3(beamThickness, beamLength, beamThickness);
 
         charPos = transform.position;
         if (!controller) { return; }
@@ -142,7 +121,6 @@ public class MovementScript : NetworkBehaviour
             CmdUpdateLegStates(new Vector3(moveDirectionCam.x, 0, moveDirection.z).magnitude > .1f);
         }
         HEADMAST.rotation = Quaternion.Euler(0, HEAD.rotation.eulerAngles.y, 0);
-        gunRend.material.SetColor("_Color", Color.Lerp(gunRend.material.color, gunColor[activeColor],Time.deltaTime * 20));
     }
 
     public int colorImOn;
@@ -204,15 +182,6 @@ public class MovementScript : NetworkBehaviour
             moveDirectionCam.z *= sprintMag;
         }
 
-        if (Input.GetKeyDown(KeyCode.LeftBracket))
-        {
-            CmdSwitchColor(-1);
-        }
-        else if(Input.GetKeyDown(KeyCode.RightBracket))
-        {
-            CmdSwitchColor(1);
-        }
-
         if (Input.GetKeyDown(KeyCode.E) && !holdingItem)
         {
             RaycastHit hit;
@@ -226,30 +195,6 @@ public class MovementScript : NetworkBehaviour
         {
             CmdPutDown();
         }
-    }
-
-    [Command(ignoreAuthority = true)]
-    void CmdSwitchColor( int increment)
-    {
-        RpcSwitchColor(increment);
-        GunColorSync();
-    }
-
-    public AudioClip flit;
-
-    [ClientRpc]
-    void RpcSwitchColor(int increment)
-    {
-        activeColor += increment;
-        AS.PlayOneShot(flit);
-        if (activeColor<0)
-        {
-            activeColor = gunColor.Length - 1;
-        }
-        if (activeColor >= gunColor.Length)
-        {
-            activeColor = 0;
-        }      
     }
 
     [Command(ignoreAuthority = true)]
@@ -289,13 +234,6 @@ public class MovementScript : NetworkBehaviour
         yRot += Input.GetAxis("Mouse X") * sens * Time.deltaTime;
         xRot = Mathf.Clamp(xRot,-89,89);
         camRot = new Vector3(xRot,yRot,0);
-        if (Input.GetKeyDown(KeyCode.Mouse0))
-        {
-            if (hasGun)
-            {
-                fireGun();
-            }
-        }
 
         if (Input.GetKeyDown(KeyCode.Mouse1))
         {
@@ -310,63 +248,30 @@ public class MovementScript : NetworkBehaviour
                 CmdSpawnPing(v,u);
             }
         }
-    }
 
-    void fireGun()
-    {
-        RaycastHit hit;
-        Physics.Raycast(HEAD.position, HEAD.forward, out hit);
-        Vector3 v;
-        Vector3 u;
-        if (hit.collider != null)
+        if (Input.GetKey(KeyCode.Mouse0))
         {
-            v = hit.point;
-            u = hit.normal;
-            hitTags(hit);
+            physicsSpeedDelta = Mathf.Lerp(physicsSpeedDelta, slowSpeed, Time.deltaTime*10);
         }
         else
         {
-            v = Vector3.one * 9999;
-            u = Vector3.one;
-        }
-        CmdSpawnBeam(v, u);
-        //CmdSpawnBullet(HEAD.forward);
-    }
-
-    void hitTags(RaycastHit hit)
-    {
-        if (hit.collider.tag == "dummy")
-        {
-            hit.collider.GetComponentInParent<DummyScript>().hitMe();
+            physicsSpeedDelta = Mathf.Lerp(physicsSpeedDelta, 1, Time.deltaTime*10);
         }
 
-        if (hit.collider.tag == "Enemy")
-        {
-            CmdHitEnemy(hit.collider.gameObject.GetComponent<NetworkIdentity>().netId);
-        }
+        CmdSlowTime(physicsSpeedDelta);
     }
 
     [Command(ignoreAuthority = true)]
-    void CmdHitEnemy(uint eID)
+    void CmdSlowTime(float spd)
     {
-        RpcHitEnemy(eID);
+        RpcSlowTime(spd);   
     }
     [ClientRpc]
-    void RpcHitEnemy(uint eID)
+    void RpcSlowTime(float spd)
     {
-        foreach (NetworkIdentity n in GameObject.Find("ENEMYSPAWNER").GetComponentsInChildren<NetworkIdentity>())
-        {
-            if (n.netId == eID)
-            {
-                n.GetComponent<EnemyController>().health--;
-                n.GetComponent<EnemyController>().pushDirection = (n.transform.position - charPos).normalized;
-                if (n.GetComponent<EnemyController>().health==0)
-                {
-                    n.GetComponent<EnemyController>().dead = true;
-                }
-            }
-        }
+        MovementScript.physicsSpeed = spd;
     }
+
 
     public AudioClip[] sounds;
 
@@ -395,42 +300,11 @@ public class MovementScript : NetworkBehaviour
         p.transform.up = upper;
     }
 
-    [Command(ignoreAuthority = true)]
-    void CmdSpawnBeam(Vector3 pos,Vector3 upper)
-    {
-        RpcSpawnBeam(pos,upper);
-    }
-
-    [ClientRpc]
-    void RpcSpawnBeam(Vector3 pos, Vector3 upper)
-    {
-        GameObject s = Instantiate(shotIndicator,pos,Quaternion.identity);
-        s.transform.up = upper;
-        beamThickness = .02f;
-        beamRend.material.SetColor("_Color",gunColor[activeColor]);
-    }
-
-    [Command(ignoreAuthority = true)]
-    void CmdSpawnBullet(Vector3 dir)
-    {
-        RpcSpawnBullet(dir);
-    }
-
-    [ClientRpc]
-    void RpcSpawnBullet(Vector3 dir)
-    {
-        if (!NetworkServer.active) { return; }
-        GameObject b = Instantiate(bullet);
-        NetworkServer.Spawn(b);
-        b.transform.position = handPos.position;
-        b.transform.forward = handPos.forward;
-        //b.GetComponent<BulletScript>().NID = controller;
-    }
-
     int jumpCount = 0;
 
     private void FixedUpdate()
     {
+        
         if (!controller) { return; }
         if (!controller.isLocalPlayer)
         {
@@ -488,7 +362,7 @@ public class MovementScript : NetworkBehaviour
                 moveDirectionCam = moveDirection.x * HEADMAST.right + moveDirection.z * HEADMAST.forward + moveDirection.y * HEADMAST.up;
                 moveDirectionCam.x *= speed;
                 moveDirectionCam.z *= speed;
-                CC.Move(moveDirectionCam * 10 * Time.fixedDeltaTime);
+                CC.Move(moveDirectionCam * 10 * Time.fixedDeltaTime * physicsSpeed);
                 CmdUpdatePosition(transform.position,controller.netId);
             }
         }
