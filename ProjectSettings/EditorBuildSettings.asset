@@ -12,12 +12,9 @@ EditorBuildSettings:
     path: Assets/Scenes/ONLINE.unity
     guid: 9fc0d4010bbf28b4594072e72b8655ab
   - enabled: 1
+    path: Assets/Scenes/ONLINE 1.unity
+    guid: eabacf002129bd04883044d1354612ac
+  - enabled: 1
     path: Assets/Scenes/OFFLINESWAPPER.unity
     guid: d1e2406713a1b3e43a39c2306f2f9f5a
-  - enabled: 1
-    path: Assets/Scenes/ONLINE 1.unity
-    guid: f99e05b8aa5dee643ab520b8b32bd9ac
-  - enabled: 1
-    path: Assets/Scenes/ONLINE 2.unity
-    guid: 073c91e9d1b01364eba4bafb2731ab22
   m_configObjects: {}

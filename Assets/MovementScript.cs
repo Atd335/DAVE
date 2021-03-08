@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using Mirror;
 
 public class MovementScript : NetworkBehaviour
@@ -15,6 +16,7 @@ public class MovementScript : NetworkBehaviour
     Vector3 moveDirection;
     public Vector3 moveDirectionCam;
     public float speed = 10;
+    public float _speed = 10;
     public float grav;
     public float jumpHeight;
     public float walkMag = 1;
@@ -62,6 +64,13 @@ public class MovementScript : NetworkBehaviour
     public static float physicsSpeed = 1;
     public  float physicsSpeedDelta = 1;
     public float slowSpeed;
+
+    //UI
+    public Image slowBar;
+    public float _slowMeter = 1;
+    public static float slowMeter = 1;
+    public float slowMeterDeplete = 1;
+    public bool slowEmpty;
 
     void Start()
     {
@@ -121,6 +130,7 @@ public class MovementScript : NetworkBehaviour
             CmdUpdateLegStates(new Vector3(moveDirectionCam.x, 0, moveDirection.z).magnitude > .1f);
         }
         HEADMAST.rotation = Quaternion.Euler(0, HEAD.rotation.eulerAngles.y, 0);
+        HEAD.GetComponent<Camera>().fieldOfView = Mathf.Lerp(HEAD.GetComponent<Camera>().fieldOfView, 75f, Time.deltaTime/2f);
     }
 
     public int colorImOn;
@@ -248,28 +258,37 @@ public class MovementScript : NetworkBehaviour
                 CmdSpawnPing(v,u);
             }
         }
-
-        if (Input.GetKey(KeyCode.Mouse0))
+        if (slowMeter == 0) { slowEmpty = true; }
+        if (Input.GetKey(KeyCode.Mouse0) && !slowEmpty)
         {
             physicsSpeedDelta = Mathf.Lerp(physicsSpeedDelta, slowSpeed, Time.deltaTime*10);
+            _slowMeter -= slowMeterDeplete * Time.deltaTime;           
         }
         else
         {
             physicsSpeedDelta = Mathf.Lerp(physicsSpeedDelta, 1, Time.deltaTime*10);
+            _slowMeter += slowMeterDeplete / 3 * Time.deltaTime;
+            if (slowMeter == 1) { slowEmpty = false; }
         }
+        if (!slowEmpty) { slowBar.color = new Color(1, 1, 1, .6f); }
+        else { slowBar.color = new Color(.5f, .5f, .5f, .4f); }
 
-        CmdSlowTime(physicsSpeedDelta);
+        _slowMeter = Mathf.Clamp(_slowMeter,0,1);
+
+        CmdSlowTime(physicsSpeedDelta,_slowMeter);
+        slowBar.fillAmount = slowMeter;
     }
 
     [Command(ignoreAuthority = true)]
-    void CmdSlowTime(float spd)
+    void CmdSlowTime(float spd,float meter)
     {
-        RpcSlowTime(spd);   
+        RpcSlowTime(spd,meter);   
     }
     [ClientRpc]
-    void RpcSlowTime(float spd)
+    void RpcSlowTime(float spd, float meter)
     {
         MovementScript.physicsSpeed = spd;
+        MovementScript.slowMeter = meter;
     }
 
 
@@ -283,6 +302,10 @@ public class MovementScript : NetworkBehaviour
     [ClientRpc]
     void RpcPlaySound(int sound, float vol)
     {
+        if (sound == 0)
+        {
+            HEAD.GetComponent<Camera>().fieldOfView = 80f;
+        }
         AS.PlayOneShot(sounds[sound],vol);
     }
 
@@ -327,8 +350,9 @@ public class MovementScript : NetworkBehaviour
                 {
                     jumpCount = 0;
                     if (jumping)
-                    {
+                    {                       
                         //Debug.Log("JUMPED");
+                        _speed *= 1.5f;
                         CmdPlaySound(0,1);//jumpsound
                         jumpCount++;
                         moveDirection.y = jumpHeight;
@@ -338,13 +362,16 @@ public class MovementScript : NetworkBehaviour
                     {
                         moveDirection.y = -.01f;
                     }
+                    _speed = Mathf.Lerp(_speed, speed, Time.deltaTime * 10 * physicsSpeed);
                 }
                 else
                 {
+                    _speed = Mathf.Lerp(_speed, speed * 1.25f, Time.deltaTime * 10f);
                     if (jumpCount < 2)
                     {
                         if (jumping)
                         {
+                            _speed *= 1.5f;
                             CmdPlaySound(0,1);//jumpsound
                             jumpCount++;
                             moveDirection.y = jumpHeight;
@@ -355,13 +382,14 @@ public class MovementScript : NetworkBehaviour
                     {
                         jumping = false;
                     }
-                    moveDirection.y -= grav * Time.fixedDeltaTime;
+                    moveDirection.y -= grav * Time.fixedDeltaTime * physicsSpeed;
                 }
-                moveDirection.y = Mathf.Clamp(moveDirection.y,-6,999);
+
+                //moveDirection.y = Mathf.Clamp(moveDirection.y,-6,999);
                 //moveDirectionCam.y = Mathf.Clamp(moveDirectionCam.y, -50, 999);
                 moveDirectionCam = moveDirection.x * HEADMAST.right + moveDirection.z * HEADMAST.forward + moveDirection.y * HEADMAST.up;
-                moveDirectionCam.x *= speed;
-                moveDirectionCam.z *= speed;
+                moveDirectionCam.x *= _speed;
+                moveDirectionCam.z *= _speed;
                 CC.Move(moveDirectionCam * 10 * Time.fixedDeltaTime * physicsSpeed);
                 CmdUpdatePosition(transform.position,controller.netId);
             }

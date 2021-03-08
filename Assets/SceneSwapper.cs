@@ -30,7 +30,7 @@ public class SceneSwapper : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (Input.GetKeyUp(KeyCode.RightShift) && isHOST && 1==2)// 1==2 not true
+        if (Input.GetKeyUp(KeyCode.RightShift) && isHOST)// 1==2 not true
         {
             if (isHOST)
             {
